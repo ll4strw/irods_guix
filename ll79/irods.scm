@@ -210,7 +210,7 @@ stored.")
 						(("usr/") ""))))
 		      )))
     (inputs
-     `(("avro-cpp" ,avro-cpp-1.9)
+     `(("avro-cpp" ,avro-cpp-1.9-for-irods)
        ("boost" ,boost)
        ("cppzmq" ,cppzmq)
        ("fmt" ,fmt-8)
