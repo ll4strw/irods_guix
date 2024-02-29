@@ -120,7 +120,7 @@
 	     ))
 	 )))
     (inputs
-     `(("avro-cpp" ,avro-cpp-1.9-for-irods)
+     `(("avro-cpp" ,avro-cpp-1.11)
        ("boost" ,boost)
        ("cppzmq" ,cppzmq)
        ("fmt" ,fmt-8)
@@ -210,7 +210,7 @@ stored.")
 						(("usr/") ""))))
 		      )))
     (inputs
-     `(("avro-cpp" ,avro-cpp-1.9-for-irods)
+     `(("avro-cpp" ,avro-cpp-1.11)
        ("boost" ,boost)
        ("cppzmq" ,cppzmq)
        ("fmt" ,fmt-8)
