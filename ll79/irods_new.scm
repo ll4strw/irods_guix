@@ -1,10 +1,9 @@
-;;; GNU Guix --- Functional package management for GNU
-;;; Copyright © 2021 Ricardo Wurmus <rekado@elephly.net>
+;;; irods_guix/irods.scm --- Bit-to-bit reproducible iRODS envs
 ;;; Copyright © 2024 Leonardo Lenoci <l.lenoci@science.leidenuniv.nl>
 ;;;
-;;; This file is part of GNU Guix.
+;;; This file is part of irods_guix.
 ;;;
-;;; GNU Guix is free software; you can redistribute it and/or modify it
+;;; irods_guix is free software; you can redistribute it and/or modify it
 ;;; under the terms of the GNU General Public License as published by
 ;;; the Free Software Foundation; either version 3 of the License, or (at
 ;;; your option) any later version.
@@ -15,9 +14,8 @@
 ;;; GNU General Public License for more details.
 ;;;
 ;;; You should have received a copy of the GNU General Public License
-;;; along with GNU Guix.  If not, see <http://www.gnu.org/licenses/>.
-
-(define-module (gnu packages irods)
+;;; along with irods_guix.  If not, see <http://www.gnu.org/licenses/>.
+(define-module (irods)
   #:use-module ((guix licenses) #:prefix license:)
   #:use-module (guix packages)
   #:use-module (guix download)
@@ -34,7 +32,6 @@
   #:use-module (gnu packages curl)
   #:use-module (gnu packages databases)
   #:use-module (gnu packages gcc)
-  #:use-module (guix gexp)
   #:use-module (gnu packages kerberos)
   #:use-module (gnu packages linux)
   #:use-module (gnu packages llvm)
@@ -50,14 +47,14 @@
 (define-public irods
   (package
     (name "irods")
-    (version "4.2.8")
+    (version "4.3.1")
     (source (origin
               (method url-fetch)
               (uri (string-append "https://github.com/irods/irods/releases/download/"
                                   version "/irods-" version ".tar.gz"))
               (sha256
                (base32
-                "0ny54c3r0j692rvbr4iibg7xgd2i7g9x8yyrw04j889bywix14rc"))))
+                "1l373izk4v56zb86xn44ab25afbhs0q7h6vp6zkvwnz1xwd17h64"))))
     (build-system cmake-build-system)
     (arguments
      `(#:configure-flags
@@ -97,6 +94,10 @@
                        (assoc-ref %build-inputs "catch2"))
         (string-append "-DIRODS_EXTERNALS_FULLPATH_NANODBC="
                        (assoc-ref %build-inputs "nanodbc"))
+	(string-append "-DIRODS_EXTERNALS_FULLPATH_SPDLOG="
+                       (assoc-ref %build-inputs "spdlog"))
+	(string-append "-DIRODS_BUILD_WITH_CLANG=ON")
+	(string-append "-DIRODS_BUILD_AGAINST_LIBCXX=FALSE")
         (string-append "-DIRODS_EXTERNALS_FULLPATH_FMT="
                        (assoc-ref %build-inputs "fmt")))
 
@@ -110,57 +111,36 @@
                (("-Werror") ""))))
          (add-after 'unpack 'remove-FHS-and-prefix-assumptions
            (lambda* (#:key inputs #:allow-other-keys)
-             (substitute* '("CMakeLists.txt"
-                            "cmake/server.cmake"
-                            "cmake/development_library.cmake"
-                            "cmake/runtime_library.cmake")
-               (("usr/") ""))
              (substitute* "lib/core/src/irods_default_paths.cpp"
                (("path.append\\(\"usr\"\\)") "path")
                (("path.remove_filename\\(\\).remove_filename\\(\\).remove_filename\\(\\)")
                 "path.remove_filename().remove_filename()"))
              (substitute* "scripts/irods/paths.py"
                (("'usr', 'lib', 'irods'") "'lib', 'irods'"))
-             (substitute* "scripts/irods/pypyodbc.py"
-               (("\"/usr/lib/libodbc.so\"")
-                (search-input-file inputs "/lib/libodbc.so")))))
-         (add-after 'set-paths 'adjust-CPLUS_INCLUDE_PATH
-           (lambda* (#:key inputs #:allow-other-keys)
-             (let ((gcc (assoc-ref inputs  "gcc")))
-               (setenv "CPLUS_INCLUDE_PATH"
-                       (string-join
-                        (cons* (search-input-directory inputs "/include/c++/v1")
-                               (search-input-directory inputs "/include/catch2")
-                               (search-input-directory inputs "/include/nlohmann")
-                               ;; Hide GCC's C++ headers so that they do not interfere with
-                               ;; the Clang headers.
-                               (delete (string-append gcc "/include/c++")
-                                       (string-split (getenv "CPLUS_INCLUDE_PATH")
-                                                     #\:)))
-                        ":"))
-               (format #true
-                       "environment variable `CPLUS_INCLUDE_PATH' changed to ~a~%"
-                       (getenv "CPLUS_INCLUDE_PATH"))))))))
+	     ))
+	 )))
     (inputs
-     `(("avro-cpp" ,avro-cpp-1.9-for-irods)
-       ("boost" ,boost-for-irods)
+     `(("avro-cpp" ,avro-cpp-1.11)
+       ("boost" ,boost)
        ("cppzmq" ,cppzmq)
-       ("fmt" ,fmt-6)
+       ("fmt" ,fmt-8)
        ("json" ,nlohmann-json)
        ("libarchive" ,libarchive)
-       ("libcxxabi" ,libcxxabi-6) ; we need this for linking with -lc++abi
        ("linux-pam" ,linux-pam)
        ("mit-krb5" ,mit-krb5)
-       ("nanodbc" ,nanodbc-for-irods)
+       ("nanodbc" ,nanodbc)
        ("openssl" ,openssl)
        ("python" ,python-wrapper)
+       ("spdlog" ,spdlog)
        ("unixodbc" ,unixodbc)
        ("zeromq" ,zeromq)))
     (native-inputs
      `(("catch2" ,catch2)
-       ("clang" ,clang-toolchain-6)
-       ("clang-runtime" ,clang-runtime-6)
-       ("libcxx+libcxxabi" ,libcxx+libcxxabi-6)))
+       ("clang" ,clang-toolchain-13)
+       ("clang-runtime" ,clang-runtime-13)
+       ("curl" ,curl)
+       ("nanodbc" ,nanodbc)
+       ))
     (home-page "https://irods.org")
     (synopsis "Data management software")
     (description "The Integrated Rule-Oriented Data System (iRODS) is data
@@ -169,82 +149,16 @@ take control of their data, regardless of where and on what device the data is
 stored.")
     (license license:bsd-3)))
 
-
-(define-public irods-4.3.1
-  (package
-   (inherit irods)
-   (version "4.3.1")
-   (source (origin
-            (method url-fetch)
-            (uri (string-append "https://github.com/irods/irods/releases/download/"
-                                version "/irods-" version ".tar.gz"))
-            (sha256
-             (base32
-              "1l373izk4v56zb86xn44ab25afbhs0q7h6vp6zkvwnz1xwd17h64"))))
-   (arguments
-    (substitute-keyword-arguments (package-arguments irods)
-       ((#:configure-flags flags #~`())
-        #~(append `(,(string-append "-DIRODS_EXTERNALS_FULLPATH_SPDLOG="
-		    #$(this-package-input "spdlog")) 
-                    ;;;(assoc-ref %build-inputs "spdlog")
-		    "-DIRODS_BUILD_WITH_CLANG=ON"
-		    "-DIRODS_BUILD_AGAINST_LIBCXX=FALSE"
-		    ) #$flags))
-       ((#:phases phases)
-	`(modify-phases ,phases
-	 (replace 'remove-FHS-and-prefix-assumptions
-	   (lambda* (#:key inputs #:allow-other-keys)
-             (substitute* "lib/core/src/irods_default_paths.cpp"
-               (("path.append\\(\"usr\"\\)") "path")
-               (("path.remove_filename\\(\\).remove_filename\\(\\).remove_filename\\(\\)")
-                "path.remove_filename().remove_filename()"))
-             (substitute* "scripts/irods/paths.py"
-               (("'usr', 'lib', 'irods'") "'lib', 'irods'"))
-	     ))
-	 (delete 'adjust-CPLUS_INCLUDE_PATH)
-	 ))		       
-
-       
-       ))
-   
-   (inputs
-    (modify-inputs (package-inputs irods)
-		   (replace "avro-cpp" avro-cpp-1.11)
-		   (replace "boost" boost)
-		   (replace "fmt" fmt-8)
-		   (replace "nanodbc-for-irods" nanodbc)
-    		   (append spdlog)
-		   (delete "libcxxabi")
-		   ))
-   
-   (native-inputs
-    (modify-inputs (package-native-inputs irods)
-		   (replace "clang" clang-toolchain-13)
-		   (replace "clang-runtime" clang-runtime-13)
-		   (append curl)
-		   (append nanodbc)
-		   (delete "libcxx+libcxxabi")
-		   ))
-
-   
-   ))
-
-   
-
-
 (define-public irods-client-icommands
   (package
     (name "irods-client-icommands")
-    (version "4.2.8")
+    (version "4.3.1")
     (source (origin
-              (method git-fetch)
-              (uri (git-reference
-                    (url "https://github.com/irods/irods_client_icommands")
-                    (commit version)))
-              (file-name (git-file-name name version))
+	     (method url-fetch)
+             (uri (string-append "https://github.com/irods/irods-client-icommands/archive/refs/tags/" version ".tar.gz"))
               (sha256
                (base32
-                "069n647p5ypf44gim8z26mwayg5lzgk7r9qyyqd8f9n7h0p4jxpn"))))
+                "0v1yyrq6hy661d1g03mqmr2w8acdli76nly4rwk3qqqavlr75l2c"))))
     (build-system cmake-build-system)
     (arguments
      `(#:tests? #false ; not clear how to run tests
@@ -255,7 +169,9 @@ stored.")
         ;; Configuration attempts to guess the distribution with Python.
         "-DIRODS_LINUX_DISTRIBUTION_NAME=guix"
         "-DIRODS_LINUX_DISTRIBUTION_VERSION_MAJOR=1"
-
+;;;	"-DIRODS_LINUX_DISTRIBUTION_VERSION_CODENAME=guix"
+	"-DCPACK_GENERATOR=TGZ"
+	
         (string-append "-DIRODS_DIR="
                        (assoc-ref %build-inputs "irods")
                        "/lib/irods/cmake")
@@ -276,53 +192,37 @@ stored.")
         (string-append "-DIRODS_EXTERNALS_FULLPATH_JSON="
                        (assoc-ref %build-inputs "json"))
         (string-append "-DIRODS_EXTERNALS_FULLPATH_FMT="
-                       (assoc-ref %build-inputs "fmt")))
+                       (assoc-ref %build-inputs "fmt"))
+	(string-append "-DIRODS_BUILD_WITH_CLANG=ON")
+	(string-append "-DIRODS_BUILD_AGAINST_LIBCXX=FALSE")
+	)
 
        #:phases
        (modify-phases %standard-phases
-         (add-after 'unpack 'unset-Werror ;
-           (lambda _                           ;
-             ;; -Werror kills the build due to a deprecation warning
-             (substitute* "CMakeLists.txt" ;
-               (("-Werror") ""))))
-         (add-after 'unpack 'remove-/usr-prefix
-           (lambda _
-             (substitute* "CMakeLists.txt"
-               (("usr/") ""))))
-         (add-after 'set-paths 'adjust-CPLUS_INCLUDE_PATH
-           (lambda* (#:key inputs #:allow-other-keys)
-             (let ((gcc (assoc-ref inputs  "gcc")))
-               (setenv "CPLUS_INCLUDE_PATH"
-                       (string-join
-                        (cons* (search-input-directory inputs
-                                                       "include/c++/v1")
-                               (search-input-directory inputs
-                                                       "include/nlohmann")
-                               ;; Hide GCC's C++ headers so that they do not interfere with
-                               ;; the Clang headers.
-                               (delete (string-append gcc "/include/c++")
-                                       (string-split (getenv "CPLUS_INCLUDE_PATH")
-                                                     #\:)))
-                        ":"))
-               (format #true
-                       "environment variable `CPLUS_INCLUDE_PATH' changed to ~a~%"
-                       (getenv "CPLUS_INCLUDE_PATH"))))))))
+		      (add-after 'unpack 'unset-Werror ;
+				 (lambda _                           ;
+				   ;; -Werror kills the build due to a deprecation warning
+				   (substitute* "CMakeLists.txt" ;
+						(("-Werror") ""))))
+		      (add-after 'unpack 'remove-/usr-prefix
+				 (lambda _
+				   (substitute* "CMakeLists.txt"
+						(("usr/") ""))))
+		      )))
     (inputs
-     `(("avro-cpp" ,avro-cpp-1.9-for-irods)
-       ("boost" ,boost-for-irods)
+     `(("avro-cpp" ,avro-cpp-1.11)
+       ("boost" ,boost)
        ("cppzmq" ,cppzmq)
-       ("fmt" ,fmt-6)
+       ("fmt" ,fmt-8)
        ("irods" ,irods)
        ("json" ,nlohmann-json)
        ("libarchive" ,libarchive)
-       ("libcxxabi" ,libcxxabi-6)     ; we need this for linking with -lc++abi
        ("mit-krb5" ,mit-krb5)
        ("openssl" ,openssl)
        ("zeromq" ,zeromq)))
     (native-inputs
-     `(("clang" ,clang-toolchain-6)
-       ("clang-runtime" ,clang-runtime-6)
-       ("libcxx+libcxxabi" ,libcxx+libcxxabi-6)
+     `(("clang" ,clang-toolchain-13)
+       ("clang-runtime" ,clang-runtime-13)
        ("help2man" ,help2man)
        ("which" ,which)))
     (home-page "https://irods.org")
