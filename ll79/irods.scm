@@ -332,3 +332,45 @@ management software.  iRODS virtualizes data storage resources, so users can
 take control of their data, regardless of where and on what device the data is
 stored.")
     (license license:bsd-3)))
+
+
+(define-public irods-client-icommands-4.3.1
+  (package
+   (inherit irods-client-icommands)
+   (version "4.3.1")
+   (source (origin
+            (method url-fetch)
+            (uri (string-append "https://github.com/irods/irods-client-icommands/archive/refs/tags/" version ".tar.gz"))
+            (sha256
+             (base32
+              "0v1yyrq6hy661d1g03mqmr2w8acdli76nly4rwk3qqqavlr75l2c"))))
+   (arguments
+    (substitute-keyword-arguments (package-arguments irods-client-icommands)
+				  ((#:configure-flags flags #~`())
+				   #~(append `(,
+					       "-DCPACK_GENERATOR=TGZ"
+					       "-DIRODS_BUILD_WITH_CLANG=ON"
+					       "-DIRODS_BUILD_AGAINST_LIBCXX=FALSE"
+					       ) #$flags))
+				  ((#:phases phases)
+				   `(modify-phases ,phases
+						   (delete 'adjust-CPLUS_INCLUDE_PATH)
+						   )
+				   )))
+   
+   (inputs
+    (modify-inputs (package-inputs irods-client-icommands)
+		   (replace "avro-cpp" avro-cpp-1.11)
+		   (replace "boost" boost)
+		   (replace "fmt" fmt-8)
+		   (replace "irods" irods-4.3.1)
+		   (delete "libcxxabi")
+		   ))
+   (native-inputs
+    (modify-inputs (package-native-inputs irods-client-icommands)
+		   (replace "clang" clang-toolchain-13)
+		   (replace "clang-runtime" clang-runtime-13)
+		   (delete "libcxx+libcxxabi")
+		   ))
+   ))
+   
